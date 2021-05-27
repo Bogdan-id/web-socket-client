@@ -172,7 +172,7 @@ export default defineComponent({
     }
 
     function connectSocket() {
-      const socket = new WebSocket('ws://obscure-anchorage-43966.herokuapp.com/') // localhost:8000
+      const socket = new WebSocket('wss://obscure-anchorage-43966.herokuapp.com/') // localhost:8000
 
       socket.onopen = function(e) {
         console.log('connection opened', e)
