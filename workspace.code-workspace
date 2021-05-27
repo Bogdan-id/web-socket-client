@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../socket-server"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../socket-types"
+		}
+	],
+	"settings": {}
+}
