@@ -355,7 +355,6 @@ textarea {
   position: relative;
   text-align: left;
   color: white;
-  background: dimgrey;
   padding: 12px;
   border-left: 3px solid;
   font-size: 0.83rem;
