@@ -129,7 +129,7 @@ export default defineComponent({
     }
 
     function submit() {
-      if (message.value) {
+      if (message.value.trim()) {
         const date = new Date().toLocaleDateString('Ru')
         const time = new Date().toLocaleTimeString('Ru') 
         const replyObject = replyState.value
@@ -231,8 +231,8 @@ export default defineComponent({
 <style>
 body {
   font-family: sans-serif;
-  height: 100%;
-  background: #77889994;
+  height: 100vh;
+  background: linear-gradient(45deg, black, transparent);
 }
 body::-webkit-scrollbar {
   width: 1em;
@@ -254,7 +254,7 @@ body::-webkit-scrollbar-thumb {
 }
 .chat-title {
   color: whitesmoke;
-  font-size: 1.13rem;
+  font-size: 1rem;
   margin-top: 5px
 }
 .socket-message {
@@ -285,7 +285,7 @@ body::-webkit-scrollbar-thumb {
   border-top: 1px solid #355455;
   text-align: left;
   padding: 5px 8px;
-  background: slategray;
+  background: linear-gradient(45deg, black, transparent);
   overflow: auto;
   height: 300px;
   border-radius: 5px 5px 0 0;
@@ -307,7 +307,7 @@ body::-webkit-scrollbar-thumb {
   margin: 0 auto;
   text-align: center;
   border-radius: 4px;
-  background: slategrey;
+  background: steelblue;
 }
 .form-input {
   margin: 6px 0;
