@@ -44,7 +44,7 @@
           </button>
           <button 
             v-if="showButtons === k && key !== user.key"
-            @click="createPeerConnection(user)"
+            @click="createPeerConnection(user.key)"
             class="call-btn">
             <Call />
           </button>
@@ -106,9 +106,9 @@
     <div class="camerabox">
       <video id="received_video" autoplay></video>
       <video id="local_video" autoplay muted></video>
-      <button id="hangup-button" @click="hangUpCall()" role="button" disabled>
+      <!-- <button id="hangup-button" @click="hangUpCall()" role="button" disabled>
         Hang Up
-      </button>
+      </button> -->
     </div>
   </div>
 </template>
@@ -194,7 +194,7 @@ export default defineComponent({
     }
 
     function connectSocket() {
-      const socket = new WebSocket('wss://obscure-anchorage-43966.herokuapp.com/')  // localhost:8000/
+      const socket = new WebSocket('ws://localhost:8000/')  // wss://obscure-anchorage-43966.herokuapp.com/ 
 
       socket.onopen = function(e) {
         console.log('connection opened', e)
@@ -238,7 +238,7 @@ export default defineComponent({
             }
             case VIDEO_OFFER: {
               console.log('VIDEO_OFFER')
-              if (!pc) pc = new RTCPeerConnection(configuration)
+              if (!pc) createPeerConnection(message.target, message.desc)
               keyTo.value = message.caller
               await pc.setRemoteDescription(message.desc)
               const stream = await navigator.mediaDevices.getUserMedia(constraints)
@@ -295,19 +295,22 @@ export default defineComponent({
     /* WebRTC */
     // const signaling = new SignalingChannel();
     const constraints = { audio: true, video: true }
-    const configuration = { iceServers: [{ 
-        urls: 'turn:' + baseURL, 
-        username: "webrtc",
-        credential: "turnserver" 
-      }] 
+    const configuration = { 
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        // { urls: 'stun:stun2.l.google.com:19302' },
+        // { urls: 'stun:stun3.l.google.com:19302' },
+        // { urls: 'stun:stun4.l.google.com:19302' },
+      ] 
     }
 
-    async function createPeerConnection(user) {
-      keyTo.value = user.key
+    async function createPeerConnection(targetKey, desc) {
+      keyTo.value = targetKey
       if (!pc) pc = new RTCPeerConnection(configuration)
 
       pc.onicecandidate = ({ candidate }) => {
-        // if(!candidate) return
+        if(!candidate) return
         console.log('onicecandidate', candidate)
         socket.send(JSON.stringify({ 
           candidate: candidate, 
@@ -320,6 +323,7 @@ export default defineComponent({
 
       pc.onnegotiationneeded = async () => {
         console.log('onnegotiationneeded')
+        if (desc) return
         try {
           await pc.setLocalDescription(await pc.createOffer())
           // send the offer to the other peer
