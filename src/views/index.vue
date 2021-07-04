@@ -7,7 +7,6 @@
       <h4 class="sign-in-title">Укажите имя пользователя</h4>
       <div class="input-wrapper">
         <input 
-          v-if="!register"
           v-model="user"
           class="form-input"
           lable="текст"
@@ -16,7 +15,6 @@
       </div>
       <div class="action-wrapper">
         <button 
-          v-if="!register"
           @click="submitUser"
           class="form-btn">
           Зарегистрировать
@@ -27,27 +25,37 @@
     <div 
       v-if="register"
       class="card">
-      <h1 class="chat-title">Веб-сокет: {{ user }}</h1>
+      <h1 class="chat-title">
+        Веб-сокет: {{ user }}
+      </h1>
       <div class="socket-block">
         <div 
-          class="socket-message"
-          @mouseenter="showReply = k"
-          @mouseleave="showReply = null"
           v-for="(user, k) in messages"
           :key="k"
+          class="socket-message"
+          @mouseenter="showButtons = k"
+          @mouseleave="showButtons = null"
           :class="{ 'socket-self-message': key === user.key }">
           <button 
-            v-if="showReply === k && key !== user.key"
+            v-if="showButtons === k && key !== user.key"
             @click="activateReply(user)"
             class="reply-btn">
             <Reply />
           </button>
+          <button 
+            v-if="showButtons === k && key !== user.key"
+            @click="createPeerConnection(user)"
+            class="call-btn">
+            <Call />
+          </button>
+          <!-- simple message -->
           <div v-if="!user.toMessage">
             <span>{{ user.name + ": " + user.message }}</span>
             <div class="msg-date-wrapper">
               <span>{{ user.dateTime }}</span>
             </div>
           </div>
+          <!-- reply message -->
           <div v-if="user.toMessage">
             <div class="repl-msg">
               <span>{{ user.toMessage }}</span>
@@ -61,6 +69,7 @@
           </div>
         </div>
       </div>
+      <!-- reply section -->
       <div 
         v-if="replyState" 
         class="reply-section">
@@ -71,6 +80,7 @@
         </button>
         <span>{{ replyMessage }}</span>
       </div>
+      <!-- text-area -->
       <div class="message-wrapper">
         <textarea 
           @keyup.enter="submit()"
@@ -81,6 +91,7 @@
           placeholder="message..."
           type="text">
         </textarea>
+        <!-- submit button -->
         <div class="sbmt-btn-wrap">
           <button 
             v-if="message"
@@ -91,21 +102,28 @@
         </div>
       </div>
     </div>
+    <!-- Video window -->
+    <div class="camerabox">
+      <video id="received_video" autoplay></video>
+      <video id="local_video" autoplay muted></video>
+      <button id="hangup-button" @click="hangUpCall()" role="button" disabled>
+        Hang Up
+      </button>
+    </div>
   </div>
 </template>
 <script>
 // @ts-check
 import { defineComponent, ref } from 'vue'
-/* eslint-disable no-unused-vars */
-import { TypeSocket } from 'bogdan-t-type-ws'
-/* eslint-enable no-unused-vars */
 import SendIcon from '@/assets/send.vue'
 import CloseIcon from '@/assets/close.vue'
 import Reply from '@/assets/reply.vue'
+import Call from '@/assets/call.vue'
 
+/* eslint-disable */ // temporary
 export default defineComponent({
   name: 'sign-in',
-  components: { SendIcon, CloseIcon, Reply },
+  components: { SendIcon, CloseIcon, Reply, Call },
   setup() {
     const socket = connectSocket()
 
@@ -115,9 +133,11 @@ export default defineComponent({
     const messages = ref([])
     const register = ref(false)
     const replyState = ref(false)
-    const showReply = ref('')
+    const showButtons = ref('')
     const key = ref('')
     const keyTo = ref('')
+    const baseURL = '127.0.0.1:8080'
+    let pc // peer connection
 
     function toggleView() {
       const el = document.querySelector('.socket-block')
@@ -147,6 +167,7 @@ export default defineComponent({
             ...replyObject,
           }, 
           room: 'chat-room',
+          meta: 'broadcast-msg'
         }
 
         socket.send(JSON.stringify(object))
@@ -163,7 +184,8 @@ export default defineComponent({
         console.log('Invalid user name')
       }
     }
-
+    
+    /** @param { Object } user - user from message */
     const activateReply = (user) => {
       replyState.value = true
       replyMessage.value = user.name + ": " + user.message 
@@ -172,7 +194,7 @@ export default defineComponent({
     }
 
     function connectSocket() {
-      const socket = new WebSocket('wss://obscure-anchorage-43966.herokuapp.com/') // localhost:8000
+      const socket = new WebSocket('ws://obscure-anchorage-43966.herokuapp.com/')  // localhost:8000/
 
       socket.onopen = function(e) {
         console.log('connection opened', e)
@@ -182,20 +204,78 @@ export default defineComponent({
           })
         )
       }
-      socket.onmessage = function(event) {
-        const message = JSON.parse(event.data)
-        if (message.authorize) {
-          key.value = message.authorize
+
+      socket.onmessage = async function(event, /* {desc, candidate} */) {
+        try {
+          const message = JSON.parse(event.data)
+          // console.log('MESSAGE', message)
+          const AUTHORIZE = message?.meta === 'authorize',
+            INIT_MESSAGE = message?.meta === 'init-messages',
+            BROADCASE_MSG = message?.meta === 'broadcast-msg',
+            VIDEO_OFFER = message?.meta === 'video-offer',
+            VIDEO_ANSWER = message?.meta === 'video-answer',
+            NEW_ICE_CANDIDATE = message?.meta === 'new-ice-candidate'
+
+          switch (true) {
+            case AUTHORIZE: {
+              console.log('AUTHORIZE')
+              return key.value = message?.authorize
+            }
+            case INIT_MESSAGE: {
+              console.log('INIT_MESSAGE')
+              if (Array.isArray(message?.messages)) {
+                messages.value.push(...message?.messages)
+              } else return console.log('Not')
+            }
+            case BROADCASE_MSG: {
+              console.log('BROADCASE_MSG')
+              if (Array.isArray(message)) {
+                return messages.value.push(...message)
+              } else { 
+                console.log('MESSAGE', message)
+                return messages.value.push(message) 
+              }
+            }
+            case VIDEO_OFFER: {
+              console.log('VIDEO_OFFER')
+              if (!pc) pc = new RTCPeerConnection(configuration)
+              keyTo.value = message.caller
+              await pc.setRemoteDescription(message.desc)
+              const stream = await navigator.mediaDevices.getUserMedia(constraints)
+              stream.getTracks().forEach((track) => pc.addTrack(track, stream))
+              await pc.setLocalDescription(await pc.createAnswer())
+              getUserMedia()
+              return socket.send(JSON.stringify({ 
+                desc: pc.localDescription,
+                room: 'chat-room',
+                target: keyTo.value,
+                meta: 'video-answer',
+              }))
+            }
+            case VIDEO_ANSWER: {
+              console.log('VIDEO_ANSWER', message.meta)
+              return await pc.setRemoteDescription(message.desc)
+            }
+            case NEW_ICE_CANDIDATE: {
+              console.log('NEW_ICE_CANDIDATE', message)
+              if (!pc) pc = new RTCPeerConnection(configuration)
+              const candidate = new RTCIceCandidate(message.candidate)
+              try {
+                return await pc.addIceCandidate(candidate)
+              } catch(err) {
+                return console.log(err)
+              }
+            }
+            default: {
+              return console.log('Unsuported meta descriptor')
+            }
+          }
+        } catch (err) {
+          console.log(err)
         }
-        if (Array.isArray(message)) {
-          messages.value.push(...message)
-        } else if (!message.authorize) {
-          messages.value.push(message)
-        }
-        setTimeout(() => {
-          toggleView()
-        }, 0)
-      };
+
+        setTimeout(() => { toggleView() }, 0)
+      }
 
       socket.onclose = function(event) {
         if (event.wasClean) {
@@ -212,18 +292,80 @@ export default defineComponent({
       return socket
     }
 
+    /* WebRTC */
+    // const signaling = new SignalingChannel();
+    const constraints = { audio: true, video: true }
+    const configuration = { iceServers: [{ 
+        urls: 'turn:' + baseURL, 
+        username: "webrtc",
+        credential: "turnserver" 
+      }] 
+    }
+
+    async function createPeerConnection(user) {
+      keyTo.value = user.key
+      if (!pc) pc = new RTCPeerConnection(configuration)
+
+      pc.onicecandidate = ({ candidate }) => {
+        // if(!candidate) return
+        console.log('onicecandidate', candidate)
+        socket.send(JSON.stringify({ 
+          candidate: candidate, 
+          meta: 'new-ice-candidate',
+          target: keyTo.value,
+          userId: key.value,
+          room: 'chat-room',
+        }))
+      }
+
+      pc.onnegotiationneeded = async () => {
+        console.log('onnegotiationneeded')
+        try {
+          await pc.setLocalDescription(await pc.createOffer())
+          // send the offer to the other peer
+          socket.send(JSON.stringify({ 
+            desc: pc.localDescription,
+            meta: 'video-offer',
+            room: 'chat-room',
+            target: keyTo.value,
+            caller: key.value,
+          }))
+        } catch (err) {
+          console.error(err)
+        }
+      }
+
+      pc.ontrack = (event) => {
+        console.log('ontrack', event)
+        document.getElementById('received_video').srcObject = event.streams[0]
+      }
+
+      getUserMedia()
+    }
+
+    async function getUserMedia() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints)
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream))
+        return document.getElementById('local_video').srcObject = stream
+      } catch (err) {
+        console.error(err)
+      }
+    }
+
     return {
       message,
       messages,
       user,
-      submit,
       register,
-      submitUser,
-      showReply,
+      showButtons,
       replyState,
-      activateReply,
       replyMessage,
       key,
+      submitUser,
+      activateReply,
+      submit,
+      createPeerConnection,
     }
   }
 })
@@ -345,6 +487,17 @@ textarea {
   transition: all 0.3s ease;
   top: 2px;
   right: 0;
+  line-height: 0.8rem;
+  border-radius: 5px 0 5px 0;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+}
+.call-btn {
+  position: absolute;
+  transition: all 0.3s ease;
+  top: 2px;
+  right: 22px;
   line-height: 0.8rem;
   border-radius: 5px 0 5px 0;
   cursor: pointer;
