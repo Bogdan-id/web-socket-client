@@ -299,9 +299,9 @@ export default defineComponent({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        // { urls: 'stun:stun2.l.google.com:19302' },
-        // { urls: 'stun:stun3.l.google.com:19302' },
-        // { urls: 'stun:stun4.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
       ] 
     }
 
@@ -351,7 +351,9 @@ export default defineComponent({
       try {
         const stream = await navigator.mediaDevices.getUserMedia(constraints)
         stream.getTracks().forEach((track) => pc.addTrack(track, stream))
-        return document.getElementById('local_video').srcObject = stream
+        const el = document.getElementById('local_video').srcObject = stream
+        el.volume = 0
+        return el
       } catch (err) {
         console.error(err)
       }
