@@ -607,7 +607,7 @@ textarea {
   position: absolute;
   top: 0;
   right: 0;
-  background: tomato;
+  background: black;
 }
 .received-video {
   display: block;
