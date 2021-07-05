@@ -104,8 +104,23 @@
     </div>
     <!-- Video window -->
     <div class="camerabox">
-      <video id="received_video" autoplay></video>
-      <video id="local_video" autoplay muted></video>
+      <div 
+        v-show="showReceived" 
+        class="received-video-wrapper">
+        <div 
+          @click="
+            closeVideoCall(), 
+            closeRemotePeer()"
+          class="video-close-btn">
+          &#10005;
+        </div>
+        <video 
+          class="received-video" 
+          id="received_video" 
+          autoplay>
+        </video>
+      </div>
+      <!-- <video id="local_video" autoplay muted></video> -->
       <!-- <button id="hangup-button" @click="hangUpCall()" role="button" disabled>
         Hang Up
       </button> -->
@@ -119,8 +134,6 @@ import SendIcon from '@/assets/send.vue'
 import CloseIcon from '@/assets/close.vue'
 import Reply from '@/assets/reply.vue'
 import Call from '@/assets/call.vue'
-
-/* eslint-disable */ // temporary
 export default defineComponent({
   name: 'sign-in',
   components: { SendIcon, CloseIcon, Reply, Call },
@@ -134,10 +147,11 @@ export default defineComponent({
     const register = ref(false)
     const replyState = ref(false)
     const showButtons = ref('')
+    const showReceived = ref('')
     const key = ref('')
     const keyTo = ref('')
-    const baseURL = '127.0.0.1:8080'
-    let pc // peer connection
+    // const baseURL = '127.0.0.1:8080'
+    let pc
 
     function toggleView() {
       const el = document.querySelector('.socket-block')
@@ -194,7 +208,7 @@ export default defineComponent({
     }
 
     function connectSocket() {
-      const socket = new WebSocket('wss://obscure-anchorage-43966.herokuapp.com/') 
+      const socket = new WebSocket('wss://obscure-anchorage-43966.herokuapp.com/') // wss://obscure-anchorage-43966.herokuapp.com/, ws://127.0.0.1:8000
 
       socket.onopen = function(e) {
         console.log('connection opened', e)
@@ -205,16 +219,18 @@ export default defineComponent({
         )
       }
 
-      socket.onmessage = async function(event, /* {desc, candidate} */) {
+      socket.onmessage = async function(event) {
         try {
           const message = JSON.parse(event.data)
-          // console.log('MESSAGE', message)
           const AUTHORIZE = message?.meta === 'authorize',
             INIT_MESSAGE = message?.meta === 'init-messages',
             BROADCASE_MSG = message?.meta === 'broadcast-msg',
             VIDEO_OFFER = message?.meta === 'video-offer',
             VIDEO_ANSWER = message?.meta === 'video-answer',
-            NEW_ICE_CANDIDATE = message?.meta === 'new-ice-candidate'
+            NEW_ICE_CANDIDATE = message?.meta === 'new-ice-candidate',
+            CLOSE_VIDEO_CALL = message?.meta === 'close-video-call'
+
+          setTimeout(() => { toggleView() }, 0)
 
           switch (true) {
             case AUTHORIZE: {
@@ -225,6 +241,7 @@ export default defineComponent({
               console.log('INIT_MESSAGE')
               if (Array.isArray(message?.messages)) {
                 messages.value.push(...message?.messages)
+                return
               } else return console.log('Not')
             }
             case BROADCASE_MSG: {
@@ -257,7 +274,7 @@ export default defineComponent({
               return await pc.setRemoteDescription(message.desc)
             }
             case NEW_ICE_CANDIDATE: {
-              console.log('NEW_ICE_CANDIDATE', message)
+              console.log('NEW_ICE_CANDIDATE', message) // Interactive Connectivity Establishment
               if (!pc) pc = new RTCPeerConnection(configuration)
               const candidate = new RTCIceCandidate(message.candidate)
               try {
@@ -266,6 +283,9 @@ export default defineComponent({
                 return console.log(err)
               }
             }
+            case CLOSE_VIDEO_CALL: {
+              return closeVideoCall()
+            }
             default: {
               return console.log('Unsuported meta descriptor')
             }
@@ -273,8 +293,6 @@ export default defineComponent({
         } catch (err) {
           console.log(err)
         }
-
-        setTimeout(() => { toggleView() }, 0)
       }
 
       socket.onclose = function(event) {
@@ -326,7 +344,6 @@ export default defineComponent({
         if (desc) return
         try {
           await pc.setLocalDescription(await pc.createOffer())
-          // send the offer to the other peer
           socket.send(JSON.stringify({ 
             desc: pc.localDescription,
             meta: 'video-offer',
@@ -342,6 +359,7 @@ export default defineComponent({
       pc.ontrack = (event) => {
         console.log('ontrack', event)
         document.getElementById('received_video').srcObject = event.streams[0]
+        showReceived.value = true
       }
 
       getUserMedia()
@@ -351,12 +369,32 @@ export default defineComponent({
       try {
         const stream = await navigator.mediaDevices.getUserMedia(constraints)
         stream.getTracks().forEach((track) => pc.addTrack(track, stream))
-        const el = document.getElementById('local_video').srcObject = stream
-        el.volume = 0
-        return el
+        // const el = document.getElementById('local_video').srcObject = stream
+        // el.volume = 0
+        return 
       } catch (err) {
         console.error(err)
       }
+    }
+
+    function closeVideoCall() {
+      if (pc) {
+        pc.ontrack = null
+        pc.onnicecandidate = null
+        pc.onnotificationneeded = null;
+        pc.getTransceivers().forEach(transceiver => { transceiver.stop() })
+        pc.close()
+        pc = null
+        showReceived.value = false
+      }
+    }
+
+    function closeRemotePeer() {
+      socket.send(JSON.stringify({
+        room: 'chat-room',
+        target: keyTo.value,
+        meta: 'close-video-call',
+      }))
     }
 
     return {
@@ -368,10 +406,13 @@ export default defineComponent({
       replyState,
       replyMessage,
       key,
+      showReceived,
       submitUser,
       activateReply,
       submit,
       createPeerConnection,
+      closeVideoCall,
+      closeRemotePeer,
     }
   }
 })
@@ -549,10 +590,27 @@ textarea {
   border: none;
   background: transparent;
 }
-    
 #submit-btn svg {
   width: 25px;
   height: 25px;
+  cursor: pointer;
+}
+
+.received-video-wrapper {
+  color: white;
+  text-align: right;
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: tomato;
+}
+.received-video {
+  display: block;
+  width: 250px;
+}
+.video-close-btn {
+  content: '&#10005;';
+  padding-right: 4px;
   cursor: pointer;
 }
 </style>
