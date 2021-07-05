@@ -120,7 +120,7 @@
           autoplay>
         </video>
       </div>
-      <!-- <video id="local_video" autoplay muted></video> -->
+      <video style="visibility: hidden" id="local_video" autoplay muted></video>
       <!-- <button id="hangup-button" @click="hangUpCall()" role="button" disabled>
         Hang Up
       </button> -->
@@ -369,8 +369,8 @@ export default defineComponent({
       try {
         const stream = await navigator.mediaDevices.getUserMedia(constraints)
         stream.getTracks().forEach((track) => pc.addTrack(track, stream))
-        // const el = document.getElementById('local_video').srcObject = stream
-        // el.volume = 0
+        const el = document.getElementById('local_video').srcObject = stream
+        el.volume = 0
         return 
       } catch (err) {
         console.error(err)
@@ -383,6 +383,11 @@ export default defineComponent({
         pc.onnicecandidate = null
         pc.onnotificationneeded = null;
         pc.getTransceivers().forEach(transceiver => { transceiver.stop() })
+        const localVideo = document.getElementById('local_video')
+        localVideo.pause()
+        localVideo.srcObject.getTracks().forEach(track => {
+          track.stop()
+        })
         pc.close()
         pc = null
         showReceived.value = false
